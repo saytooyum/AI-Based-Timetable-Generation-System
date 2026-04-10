@@ -37,7 +37,7 @@ This project provides a **web-based solution** that:
    - Faculty availability
    - Student course selections
    - Room capacity
-3. AI/Optimization engine generates timetable
+3. AI/Optimisation engine generates timetable
 4. Admin can:
    - Edit schedules
    - Simulate scenarios
