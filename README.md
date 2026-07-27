@@ -14,7 +14,7 @@ This project provides a **web-based solution** that:
 - Optimizes faculty workload and infrastructure usage
 - Supports dynamic updates and scenario simulation
 
----
+
 
 ## ✨ Features
 
