@@ -1,3 +1,4 @@
+import os 
 DAYS = [
     "Monday",
     "Tuesday",
@@ -33,3 +34,8 @@ def generate_slots():
         for day in DAYS
         for time in TIME_SLOTS
     ]
+DATA_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "data"
+)

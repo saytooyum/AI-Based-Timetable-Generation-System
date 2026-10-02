@@ -3,10 +3,21 @@ import pandas as pd
 
 from ortools.sat.python import cp_model
 
-from solver.config import DAYS, generate_slots, TIME_VALUES
+from solver.config import (
+    DAYS,
+    TIME_VALUES,
+    DATA_PATH,
+    generate_slots,
 
+)
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "..")
+courses_file = os.path.join(DATA_PATH, "courses.csv")
+faculty_file = os.path.join(DATA_PATH, "faculty.csv")
+rooms_file = os.path.join(DATA_PATH, "rooms.csv")
+
+courses = pd.read_csv(courses_file)
+faculty = pd.read_csv(faculty_file)
+rooms = pd.read_csv(rooms_file)
 
 
 def generate_sessions(courses):
@@ -20,6 +31,8 @@ def generate_sessions(courses):
                 "course_code": course["course_code"],
                 "course_name": course["course_name"],
                 "session_type": "Theory",
+                "faculty": course["faculty"],
+                "room_type": course["room_type"],
             })
 
         for _ in range(int(course["practical_hours"])):
@@ -27,6 +40,8 @@ def generate_sessions(courses):
                 "course_code": course["course_code"],
                 "course_name": course["course_name"],
                 "session_type": "Practical",
+                "faculty": course["faculty"],
+                "room_type": course["room_type"],
             })
 
     return sessions
@@ -54,7 +69,26 @@ def generate_optimized_timetable():
             assignment[(session_index, slot_index)] = model.NewBoolVar(
                 f"session_{session_index}_slot_{slot_index}"
             )
+    # --------------------------------------------------
+    # ROOM DECISION VARIABLES
+    # --------------------------------------------------
 
+    room_assignment = {}
+
+    for session_index, session in enumerate(sessions):
+        compatible_rooms = [
+            room_index
+            for room_index, room in rooms.iterrows()
+            if room["room_type"] == session["room_type"]
+        ]
+
+        for slot_index in range(len(slots)):
+            for room_index in compatible_rooms:
+                room_assignment[
+                    (session_index, slot_index, room_index)
+                ] = model.NewBoolVar(
+                    f"session_{session_index}_slot_{slot_index}_room_{room_index}"
+                )
     # --------------------------------------------------
     # HARD CONSTRAINT 1
     # Every session must have exactly one slot.
@@ -67,7 +101,53 @@ def generate_optimized_timetable():
                 for slot_index in range(len(slots))
             ) == 1
         )
+    # --------------------------------------------------
+    # HARD CONSTRAINT 1B
+    # Every session must have exactly one room.
+    # --------------------------------------------------
 
+    for session_index, session in enumerate(sessions):
+
+        compatible_rooms = [
+            room_index
+            for room_index, room in rooms.iterrows()
+            if room["room_type"] == session["room_type"]
+        ]
+
+        model.Add(
+            sum(
+                room_assignment[
+                    (session_index, slot_index, room_index)
+                ]
+                for slot_index in range(len(slots))
+                for room_index in compatible_rooms
+            ) == 1
+        )
+     # --------------------------------------------------
+    # HARD CONSTRAINT 1C
+    # A room can only be assigned when the session
+    # is assigned to that same time slot.
+    # --------------------------------------------------
+
+    for session_index, session in enumerate(sessions):
+
+        compatible_rooms = [
+            room_index
+            for room_index, room in rooms.iterrows()
+            if room["room_type"] == session["room_type"]
+        ]
+
+        for slot_index in range(len(slots)):
+
+            model.Add(
+                sum(
+                    room_assignment[
+                        (session_index, slot_index, room_index)
+                    ]
+                    for room_index in compatible_rooms
+                )
+                == assignment[(session_index, slot_index)]
+            )       
     # --------------------------------------------------
     # HARD CONSTRAINT 2
     # A slot can contain at most one session.
@@ -80,7 +160,54 @@ def generate_optimized_timetable():
                 for session_index in range(len(sessions))
             ) <= 1
         )
+    # --------------------------------------------------
+    # HARD CONSTRAINT 3
+    # A faculty member cannot teach two sessions
+    # at the same time.
+    #    --------------------------------------------------
 
+    faculty_names = sorted(
+        set(session["faculty"] for session in sessions)
+    )
+
+    for faculty_name in faculty_names:
+
+     faculty_sessions = [
+            i
+            for i, session in enumerate(sessions)
+            if session["faculty"] == faculty_name
+        ]
+
+    for slot_index in range(len(slots)):
+
+        model.Add(
+            sum(
+                assignment[(session_index, slot_index)]
+                for session_index in faculty_sessions
+            ) <= 1
+        )
+     # --------------------------------------------------
+    # HARD CONSTRAINT 4
+    # A room cannot host two sessions at the same time.
+    # --------------------------------------------------
+
+    for slot_index in range(len(slots)):
+
+        for room_index in rooms.index:
+
+            model.Add(
+                sum(
+                    room_assignment[
+                        (session_index, slot_index, room_index)
+                    ]
+                    for session_index in range(len(sessions))
+                    if (
+                        session_index,
+                        slot_index,
+                        room_index
+                    ) in room_assignment
+                ) <= 1
+            )       
     # --------------------------------------------------
     # OPTIMIZATION
     # Spread sessions of the same course across days.
@@ -383,9 +510,32 @@ def generate_optimized_timetable():
                 assignment[(session_index, slot_index)]
             ):
 
+                assigned_room = None
+
+                for room_index, room in rooms.iterrows():
+
+                    if (
+                        session_index,
+                        slot_index,
+                        room_index
+                    ) in room_assignment:
+
+                        if solver.Value(
+                            room_assignment[
+                                (
+                                    session_index,
+                                    slot_index,
+                                    room_index
+                                )
+                            ]
+                        ):
+                            assigned_room = room["room_name"]
+                            break
+
                 timetable.append({
                     **session,
                     "assigned_slot": slot,
+                    "assigned_room": assigned_room,
                 })
 
                 break
