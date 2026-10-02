@@ -3,7 +3,7 @@ import pandas as pd
 
 from ortools.sat.python import cp_model
 
-from solver.config import DAYS, generate_slots
+from solver.config import DAYS, generate_slots, TIME_VALUES
 
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "..")
@@ -183,7 +183,7 @@ def generate_optimized_timetable():
 
             repeated_day_penalties.append(penalty)
 
-        # --------------------------------------------------
+     # --------------------------------------------------
     # OPTIMIZATION 2
     # Balance the number of classes across weekdays.
     # --------------------------------------------------
@@ -249,15 +249,108 @@ def generate_optimized_timetable():
         == max_daily_load - min_daily_load
     )
 
+        # --------------------------------------------------
+    # OPTIMIZATION 3
+    # Minimize unwanted gaps between classes.
+    #
+    # The 12 PM -> 2 PM gap is treated as a normal
+    # lunch break and is NOT penalized.
+    # --------------------------------------------------
+
+    gap_penalties = []
+
+    for day in DAYS:
+
+        day_slot_indices = [
+            slot_index
+            for slot_index, slot in enumerate(slots)
+            if slot.startswith(day)
+        ]
+
+        occupied = {}
+
+        for slot_index in day_slot_indices:
+
+            occupied[slot_index] = model.NewBoolVar(
+                f"{day}_slot_{slot_index}_occupied"
+            )
+
+            model.Add(
+                occupied[slot_index]
+                ==
+                sum(
+                    assignment[(session_index, slot_index)]
+                    for session_index in range(len(sessions))
+                )
+            )
+
+        for i in range(len(day_slot_indices)):
+            for j in range(i + 1, len(day_slot_indices)):
+
+                first_slot = day_slot_indices[i]
+                second_slot = day_slot_indices[j]
+
+                first_time = slots[first_slot].replace(
+                    f"{day} ",
+                    ""
+                )
+
+                second_time = slots[second_slot].replace(
+                    f"{day} ",
+                    ""
+                )
+
+                time_gap = (
+                    TIME_VALUES[second_time]
+                    - TIME_VALUES[first_time]
+                )
+
+                # Ignore the normal 12 PM -> 2 PM lunch break.
+                if time_gap == 2:
+                    continue
+
+                # Only gaps with at least one timetable slot
+                # between the two occupied slots matter.
+                if j <= i + 1:
+                    continue
+
+                gap = model.NewBoolVar(
+                    f"{day}_gap_{i}_{j}"
+                )
+
+                # Gap exists when both boundary slots are
+                # occupied and there is an empty slot between them.
+                model.AddBoolAnd(
+                    [
+                        occupied[first_slot],
+                        occupied[second_slot],
+                    ]
+                ).OnlyEnforceIf(gap)
+
+                model.AddBoolOr(
+                    [
+                        occupied[first_slot].Not(),
+                        occupied[second_slot].Not(),
+                        *[
+                            occupied[day_slot_indices[k]]
+                            for k in range(i + 1, j)
+                        ],
+                    ]
+                ).OnlyEnforceIf(gap.Not())
+
+                gap_penalties.append(
+                    max(1, time_gap - 1) * gap
+                )
+
     # --------------------------------------------------
     # COMBINED OBJECTIVE
     # --------------------------------------------------
 
     model.Minimize(
         10 * sum(repeated_day_penalties)
-        + daily_imbalance
+        + 5 * daily_imbalance
+        + sum(gap_penalties)
     )
-
     # --------------------------------------------------
     # SOLVE
     # --------------------------------------------------
