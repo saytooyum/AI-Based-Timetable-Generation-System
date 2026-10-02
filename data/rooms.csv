@@ -1,0 +1,6 @@
+room_id,room_name,room_type,capacity
+R001,Room 101,CLASSROOM,60
+R002,Room 102,CLASSROOM,60
+R003,Computer Lab,LAB,40
+R004,Physics Lab,LAB,40
+R005,Chemistry Lab,LAB,40

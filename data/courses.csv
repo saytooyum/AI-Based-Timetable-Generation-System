@@ -1,0 +1,6 @@
+course_code,course_name,credits,theory_hours,practical_hours,faculty,room_type
+PHY101,Mechanics,4,3,1,Dr Sharma,LAB
+MAT101,Calculus,4,3,1,Dr Gupta,CLASSROOM
+CS101,Programming,3,2,1,Dr Singh,LAB
+ENG101,English,2,2,0,Dr Kumar,CLASSROOM
+CHE101,Chemistry,4,3,1,Dr Verma,LAB
