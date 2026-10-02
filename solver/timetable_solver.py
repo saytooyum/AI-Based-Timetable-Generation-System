@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "../data")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "..")
 
 def generate_simple_timetable():
     courses_file = os.path.join(DATA_PATH, "courses.csv")
